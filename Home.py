@@ -6,13 +6,14 @@ import os
 
 st.set_page_config(page_title="blueberry. | boutique", page_icon="🫐", layout="wide")
 
+# CSS con contraste garantizado para inputs, selectboxes, botones y alertas
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400&display=swap');
     
     .stApp {
-        background-color: #FAF5F5;
-        color: #18222D;
+        background-color: #FAF5F5 !important;
+        color: #18222D !important;
         font-family: 'Montserrat', sans-serif;
     }
     h1, h2, h3 {
@@ -20,7 +21,50 @@ st.markdown("""
         color: #2A375A !important;
     }
     p, label, span, div {
-        color: #18222D;
+        color: #18222D !important;
+    }
+    /* Cajas de seleccion (selectbox) e inputs de texto con fondo blanco y texto oscuro */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    input {
+        background-color: #FFFFFF !important;
+        color: #18222D !important;
+        border: 1.5px solid #2A375A !important;
+    }
+    ul[role="listbox"] li {
+        background-color: #FFFFFF !important;
+        color: #18222D !important;
+    }
+    /* Botones secundarios (Elegir) */
+    .stButton > button[kind="secondary"] {
+        background-color: #FFFFFF !important;
+        color: #2A375A !important;
+        border: 1.5px solid #2A375A !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button[kind="secondary"]:hover {
+        background-color: #2A375A !important;
+        color: #FAF5F5 !important;
+    }
+    /* Boton primario (Confirmar Pedido) */
+    .stButton > button[kind="primary"] {
+        background-color: #2A375A !important;
+        color: #F6EFA6 !important;
+        border: none !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button[kind="primary"] p {
+        color: #F6EFA6 !important;
+    }
+    /* Alertas de feedback legibles */
+    div[data-testid="stAlert"] {
+        background-color: #F4F1EA !important;
+        border: 1.5px solid #2A375A !important;
+        color: #18222D !important;
+    }
+    div[data-testid="stAlert"] p {
+        color: #18222D !important;
+        font-weight: 500 !important;
     }
     .hero-box {
         background-color: #F4F1EA;
@@ -30,9 +74,14 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
     .price-tag {
-        color: #6997BF !important;
+        color: #2A375A !important;
+        background-color: #F6EFA6;
+        padding: 2px 8px;
+        border-radius: 4px;
         font-weight: 600;
-        font-size: 0.95rem;
+        font-size: 0.9rem;
+        display: inline-block;
+        margin-bottom: 4px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -42,7 +91,7 @@ TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 
 COLLARES = [
     {"id": "Wrap Azul", "nombre": "The Blueberry Wrap Azul", "precio": 35000, "cogs": 6000, "img": "images/collar-azul.jpg", "angulo": 30, "desc": "Perlas & mostacilla índigo · 4+ formas de uso"},
-    {"id": "Wrap Vinotinto", "nombre": "The Blueberry Wrap Vinotinto", "precio": 35000, "cogs": 6000, "img": "images/collar-vinotinto.jpg", "angulo": 65, "desc": "Tono profundo · Hecho a mano con intención"},
+    {"id": "Wrap Vinotinto", "nombre": "The Blueberry Wrap Vinotinto", "precio": 35000, "cogs": 6000, "img": "images/collar-vinotinto.jpg", "angulo": 65, "desc": "Tono profundo · Creado desde el amor"},
     {"id": "Wrap Coral", "nombre": "The Blueberry Wrap Coral", "precio": 35000, "cogs": 6000, "img": "images/collar-coral.jpg", "angulo": 100, "desc": "Vibra veraniega · Effortless chic"},
     {"id": "Wrap Neutro", "nombre": "The Blueberry Wrap Neutro", "precio": 35000, "cogs": 6000, "img": "images/collar-beige.jpg", "angulo": 135, "desc": "Crema perlada · Combina con todos tus básicos"},
     {"id": "Pearl Choker", "nombre": "Pearl Essential Choker", "precio": 85000, "cogs": 47664, "img": "images/collar-perlas.jpg", "angulo": 170, "desc": "Perlas auténticas de río · Edición especial"},
@@ -60,8 +109,8 @@ def enviar_a_wokwi(nombre_corto, angulo):
 st.markdown("""
 <div class="hero-box">
     <h1 style="margin-bottom:0.2rem;">blueberry.</h1>
-    <p style="color:#6997BF !important; font-style:italic; margin-bottom:0.5rem;">hecho a mano en medellín con intención · 1 pieza = 4+ formas de usarla</p>
-    <p style="margin:0; font-size:0.9rem;">Selecciona tu pieza favorita en nuestra galería o sube una foto de tu outfit para recibir una recomendación al instante.</p>
+    <p style="color:#6997BF !important; font-style:italic; margin-bottom:0.5rem;">creado en medellín desde el amor · 1 pieza = 4+ formas de usarla</p>
+    <p style="margin:0; font-size:0.95rem;">Selecciona tu pieza favorita en nuestra galería o sube una foto de tu outfit para recibir una recomendación al instante.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -101,6 +150,7 @@ for idx, item in enumerate(COLLARES):
         st.caption(item["desc"])
         if st.button("Elegir ✨", key=f"btn_{idx}", use_container_width=True):
             st.session_state["seleccionado"] = item["nombre"]
+            st.rerun()
 
 st.divider()
 
@@ -131,8 +181,8 @@ if st.button("✨ Confirmar Pedido y Enviar al Taller", type="primary", use_cont
             "precio": collar_obj["precio"],
             "cogs": collar_obj["cogs"],
             "entrega": entrega,
-            "estado": "🔨 En ensamble"
+            "estado": "Pendiente"
         })
-        st.success(f"¡Pedido enviado! En **Wokwi** se activó la alerta y el dispensador giró a **{collar_obj['angulo']}°** para armar tu **{collar_obj['id']}**.")
+        st.success(f"¡Pedido enviado! En Wokwi se activó la alerta y el dispensador giró a {collar_obj['angulo']}° para armar tu {collar_obj['id']}.")
     except Exception as e:
         st.error(f"Error enviando señal MQTT: {e}")
