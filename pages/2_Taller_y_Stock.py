@@ -1,11 +1,9 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
-import paho.mqtt.publish as publish
 import time
 
 st.set_page_config(page_title="blueberry. | mesa de taller", page_icon="🪡", layout="wide")
 
-# Estética Modo Taller Artesanal (Ink Black + Blueberry Indigo + Vanilla Custard)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400&display=swap');
@@ -58,7 +56,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BROKER = "broker.hivemq.com"
+BROKER = "broker.emqx.io"
 TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 TOPIC_STOCK = "eafit2026/mariangel_blueberry_9842/stock"
 TOPIC_ESTADO = "eafit2026/mariangel_blueberry_9842/estado"
@@ -68,25 +66,38 @@ if "stock_taller" not in st.session_state:
 if "historial_pedidos" not in st.session_state:
     st.session_state["historial_pedidos"] = []
 
-def leer_estado_retenido_wokwi():
+def sincronizar_con_wokwi():
     datos = {"stock": None, "estado": None}
     
     def on_message(client, userdata, msg):
-        texto = msg.payload.decode()
-        if msg.topic == TOPIC_STOCK:
+        texto = msg.payload.decode().strip()
+        if msg.topic == TOPIC_STOCK and texto.isdigit():
             datos["stock"] = int(texto)
         elif msg.topic == TOPIC_ESTADO:
             datos["estado"] = texto
 
-    client = mqtt.Client(client_id=f"BB_Taller_{int(time.time())}")
+    client = mqtt.Client(client_id=f"BB_Taller_{int(time.time()*1000)}")
     client.on_message = on_message
     client.connect(BROKER, 1883, 60)
-    client.subscribe([(TOPIC_STOCK, 0), (TOPIC_ESTADO, 0)])
+    client.subscribe([(TOPIC_STOCK, 1), (TOPIC_ESTADO, 1)])
     client.loop_start()
-    time.sleep(1.2)
+    
+    # Le pide activamente a Wokwi que publique su lectura actual del potenciometro
+    client.publish(TOPIC_CMD, "GET_STOCK", qos=1)
+    time.sleep(1.5)
+    
     client.loop_stop()
     client.disconnect()
     return datos
+
+def enviar_restock_wokwi():
+    client = mqtt.Client(client_id=f"BB_Restock_{int(time.time()*1000)}")
+    client.connect(BROKER, 1883, 60)
+    client.loop_start()
+    client.publish(TOPIC_CMD, "RESTOCK", qos=1).wait_for_publish(timeout=2.0)
+    client.publish(TOPIC_STOCK, "100", qos=1, retain=True).wait_for_publish(timeout=2.0)
+    client.loop_stop()
+    client.disconnect()
 
 # --- ENCABEZADO MESA DE TALLER ---
 st.markdown("""
@@ -106,7 +117,7 @@ with col_info:
 
 with col_btn1:
     if st.button("🔄 Sincronizar con Wokwi", type="primary", use_container_width=True):
-        datos = leer_estado_retenido_wokwi()
+        datos = sincronizar_con_wokwi()
         if datos["stock"] is not None:
             st.session_state["stock_taller"] = datos["stock"]
         if datos["estado"] == "LISTO":
@@ -114,14 +125,13 @@ with col_btn1:
                 if p["estado"] == "Pendiente":
                     p["estado"] = "Finalizado"
                     break
-        st.toast(f"✅ Sincronizado: Stock en {st.session_state['stock_taller']}%")
+        st.toast(f"✅ Stock actual leído de Wokwi: {st.session_state['stock_taller']}%")
 
 with col_btn2:
     if st.button("📦 Hacer Restock (100%)", use_container_width=True):
         st.session_state["stock_taller"] = 100
         try:
-            publish.single(TOPIC_CMD, payload="RESTOCK", hostname=BROKER, port=1883)
-            publish.single(TOPIC_STOCK, payload="100", hostname=BROKER, port=1883, retain=True)
+            enviar_restock_wokwi()
         except Exception:
             pass
         st.toast("✨ Restock completado (100% en Insumos Hag / Mega Balsos)")
