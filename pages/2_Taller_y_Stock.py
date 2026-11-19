@@ -63,7 +63,7 @@ TOPIC_STOCK = "eafit2026/mariangel_blueberry_9842/stock"
 TOPIC_ESTADO = "eafit2026/mariangel_blueberry_9842/estado"
 
 if "stock_taller" not in st.session_state:
-    st.session_state["stock_taller"] = 75
+    st.session_state["stock_taller"] = 100
 if "historial_pedidos" not in st.session_state:
     st.session_state["historial_pedidos"] = []
 
@@ -85,9 +85,8 @@ def sincronizar_con_wokwi():
     client.loop_start()
     time.sleep(0.3)
     
-    # Solicita lectura activa a Wokwi y espera respuesta
     client.publish(TOPIC_CMD, "GET_STOCK", qos=1).wait_for_publish(timeout=2.0)
-    time.sleep(1.5)
+    time.sleep(1.2)
     
     client.loop_stop()
     client.disconnect()
@@ -131,7 +130,7 @@ with col_btn1:
                 if p["estado"] == "Pendiente":
                     p["estado"] = "Finalizado"
                     break
-        st.toast(f"✅ Stock actual leído de Wokwi: {st.session_state['stock_taller']}%")
+        st.rerun()
 
 with col_btn2:
     if st.button("📦 Hacer Restock (100%)", use_container_width=True):
@@ -140,7 +139,6 @@ with col_btn2:
             enviar_restock_wokwi()
         except Exception as e:
             st.error(f"Error enviando restock: {e}")
-        st.toast("✨ Restock completado (100% enviado a Wokwi)")
         st.rerun()
 
 st.divider()
