@@ -1,5 +1,6 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
+import paho.mqtt.publish as publish
 import time
 
 st.set_page_config(page_title="blueberry. | mesa de taller", page_icon="🪡", layout="wide")
@@ -10,8 +11,8 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400&display=swap');
     
     .stApp {
-        background-color: #18222D;
-        color: #FAF5F5;
+        background-color: #18222D !important;
+        color: #FAF5F5 !important;
         font-family: 'Montserrat', sans-serif;
     }
     h1, h2, h3 {
@@ -27,6 +28,11 @@ st.markdown("""
     }
     [data-testid="stMetricLabel"] {
         color: #6997BF !important;
+    }
+    .stButton > button[kind="secondary"] {
+        background-color: #2A375A !important;
+        color: #F6EFA6 !important;
+        border: 1.5px solid #F6EFA6 !important;
     }
     .workshop-banner {
         background-color: #2A375A;
@@ -48,12 +54,12 @@ st.markdown("""
         border-radius: 8px;
         border-left: 4px solid #6997BF;
         margin-bottom: 0.7rem;
-        opacity: 0.9;
     }
     </style>
 """, unsafe_allow_html=True)
 
 BROKER = "broker.hivemq.com"
+TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 TOPIC_STOCK = "eafit2026/mariangel_blueberry_9842/stock"
 TOPIC_ESTADO = "eafit2026/mariangel_blueberry_9842/estado"
 
@@ -61,8 +67,6 @@ if "stock_taller" not in st.session_state:
     st.session_state["stock_taller"] = 75
 if "historial_pedidos" not in st.session_state:
     st.session_state["historial_pedidos"] = []
-if "ultimo_evento_boton" not in st.session_state:
-    st.session_state["ultimo_evento_boton"] = ""
 
 def leer_estado_retenido_wokwi():
     datos = {"stock": None, "estado": None}
@@ -79,7 +83,7 @@ def leer_estado_retenido_wokwi():
     client.connect(BROKER, 1883, 60)
     client.subscribe([(TOPIC_STOCK, 0), (TOPIC_ESTADO, 0)])
     client.loop_start()
-    time.sleep(1.2)  # Lee inmediatamente los mensajes retenidos en el broker
+    time.sleep(1.2)
     client.loop_stop()
     client.disconnect()
     return datos
@@ -94,28 +98,34 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- BOTÓN DE SINCRONIZACIÓN ---
-col_info, col_btn = st.columns([2.2, 1])
+# --- CONTROLES DE SINCRONIZACIÓN Y RESTOCK ---
+col_info, col_btn1, col_btn2 = st.columns([2, 1, 1])
+
 with col_info:
-    st.write("Mueve el potenciómetro en Wokwi (0 a 100%) o presiona el botón azul al terminar un collar y actualiza la mesa:")
-with col_btn:
+    st.write("Mueve el potenciómetro o presiona el botón azul en Wokwi, o ejecuta un restock de insumos:")
+
+with col_btn1:
     if st.button("🔄 Sincronizar con Wokwi", type="primary", use_container_width=True):
         datos = leer_estado_retenido_wokwi()
-        actualizado = False
         if datos["stock"] is not None:
             st.session_state["stock_taller"] = datos["stock"]
-            actualizado = True
         if datos["estado"] == "LISTO":
-            # Busca el primer pedido pendiente y lo pasa a Finalizado
             for p in st.session_state["historial_pedidos"]:
                 if p["estado"] == "Pendiente":
                     p["estado"] = "Finalizado"
-                    actualizado = True
                     break
-        if actualizado:
-            st.toast(f"✅ Sincronizado: Stock en {st.session_state['stock_taller']}%")
-        else:
-            st.info("Asegúrate de darle Play en Wokwi y mover el potenciómetro.")
+        st.toast(f"✅ Sincronizado: Stock en {st.session_state['stock_taller']}%")
+
+with col_btn2:
+    if st.button("📦 Hacer Restock (100%)", use_container_width=True):
+        st.session_state["stock_taller"] = 100
+        try:
+            publish.single(TOPIC_CMD, payload="RESTOCK", hostname=BROKER, port=1883)
+            publish.single(TOPIC_STOCK, payload="100", hostname=BROKER, port=1883, retain=True)
+        except Exception:
+            pass
+        st.toast("✨ Restock completado (100% en Insumos Hag / Mega Balsos)")
+        st.rerun()
 
 st.divider()
 
@@ -125,7 +135,7 @@ pendientes = [p for p in pedidos if p["estado"] == "Pendiente"]
 finalizados = [p for p in pedidos if p["estado"] == "Finalizado"]
 
 stock_actual = st.session_state["stock_taller"]
-collares_posibles = int((stock_actual / 100) * 20)  # 100% = 20 collares
+collares_posibles = int((stock_actual / 100) * 20)
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Stock de Insumos", f"{stock_actual}%", f"~{collares_posibles} collares armables")
