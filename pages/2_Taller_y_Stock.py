@@ -1,6 +1,7 @@
 import streamlit as st
 import paho.mqtt.client as mqtt
 import time
+import uuid
 
 st.set_page_config(page_title="blueberry. | mesa de taller", page_icon="🪡", layout="wide")
 
@@ -56,7 +57,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BROKER = "broker.emqx.io"
+BROKER = "broker.hivemq.com"
 TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 TOPIC_STOCK = "eafit2026/mariangel_blueberry_9842/stock"
 TOPIC_ESTADO = "eafit2026/mariangel_blueberry_9842/estado"
@@ -76,14 +77,16 @@ def sincronizar_con_wokwi():
         elif msg.topic == TOPIC_ESTADO:
             datos["estado"] = texto
 
-    client = mqtt.Client(client_id=f"BB_Taller_{int(time.time()*1000)}")
+    unique_id = f"BB_Taller_{uuid.uuid4().hex[:8]}"
+    client = mqtt.Client(client_id=unique_id)
     client.on_message = on_message
     client.connect(BROKER, 1883, 60)
     client.subscribe([(TOPIC_STOCK, 1), (TOPIC_ESTADO, 1)])
     client.loop_start()
+    time.sleep(0.3)
     
-    # Le pide activamente a Wokwi que publique su lectura actual del potenciometro
-    client.publish(TOPIC_CMD, "GET_STOCK", qos=1)
+    # Solicita lectura activa a Wokwi y espera respuesta
+    client.publish(TOPIC_CMD, "GET_STOCK", qos=1).wait_for_publish(timeout=2.0)
     time.sleep(1.5)
     
     client.loop_stop()
@@ -91,11 +94,14 @@ def sincronizar_con_wokwi():
     return datos
 
 def enviar_restock_wokwi():
-    client = mqtt.Client(client_id=f"BB_Restock_{int(time.time()*1000)}")
+    unique_id = f"BB_Restock_{uuid.uuid4().hex[:8]}"
+    client = mqtt.Client(client_id=unique_id)
     client.connect(BROKER, 1883, 60)
     client.loop_start()
+    time.sleep(0.3)
     client.publish(TOPIC_CMD, "RESTOCK", qos=1).wait_for_publish(timeout=2.0)
     client.publish(TOPIC_STOCK, "100", qos=1, retain=True).wait_for_publish(timeout=2.0)
+    time.sleep(0.3)
     client.loop_stop()
     client.disconnect()
 
@@ -132,9 +138,9 @@ with col_btn2:
         st.session_state["stock_taller"] = 100
         try:
             enviar_restock_wokwi()
-        except Exception:
-            pass
-        st.toast("✨ Restock completado (100% en Insumos Hag / Mega Balsos)")
+        except Exception as e:
+            st.error(f"Error enviando restock: {e}")
+        st.toast("✨ Restock completado (100% enviado a Wokwi)")
         st.rerun()
 
 st.divider()
