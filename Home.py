@@ -4,6 +4,7 @@ from PIL import Image
 import numpy as np
 import os
 import time
+import uuid
 
 st.set_page_config(page_title="blueberry. | boutique", page_icon="🫐", layout="wide")
 
@@ -107,7 +108,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BROKER = "broker.emqx.io"
+BROKER = "broker.hivemq.com"
 TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 
 COLLARES = [
@@ -124,11 +125,14 @@ if "historial_pedidos" not in st.session_state:
     st.session_state["historial_pedidos"] = []
 
 def enviar_a_wokwi(nombre_corto, angulo):
-    client = mqtt.Client(client_id=f"BB_Web_{int(time.time()*1000)}")
+    unique_id = f"BB_Web_{uuid.uuid4().hex[:8]}"
+    client = mqtt.Client(client_id=unique_id)
     client.connect(BROKER, 1883, 60)
     client.loop_start()
-    info = client.publish(TOPIC_CMD, f"PEDIDO:{nombre_corto}:{angulo}", qos=1)
-    info.wait_for_publish(timeout=3.0)
+    time.sleep(0.3)  # Asegura handshake completo antes de publicar
+    msg_info = client.publish(TOPIC_CMD, payload=f"PEDIDO:{nombre_corto}:{angulo}", qos=1)
+    msg_info.wait_for_publish(timeout=3.0)
+    time.sleep(0.3)  # Asegura salida del paquete antes de cerrar
     client.loop_stop()
     client.disconnect()
 
