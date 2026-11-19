@@ -1,85 +1,83 @@
 import streamlit as st
-import paho.mqtt.client as mqtt
+import paho.mqtt.publish as publish
 from PIL import Image
 import numpy as np
-import time
 
-st.set_page_config(page_title="Blueberry · Vitrina Multimodal", page_icon="🫐", layout="wide")
+st.set_page_config(page_title="Blueberry · Boutique", page_icon="🫐", layout="centered")
 
-# Estilos personalizados con la paleta oficial de Blueberry
-st.markdown("""
-    <style>
-    .stApp { background-color: #FAF5F5; color: #18222D; }
-    h1, h2, h3 { color: #2A375A !important; font-family: Georgia, serif; }
-    </style>
-""", unsafe_allow_html=True)
-
+BROKER = "broker.hivemq.com"
 TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 
-def enviar_a_wokwi(mensaje):
-    client = mqtt.Client(client_id=f"Streamlit_Home_{int(time.time())}")
-    client.connect("broker.hivemq.com", 1883, 60)
-    client.publish(TOPIC_CMD, mensaje)
-    client.disconnect()
+# Catálogo real de Blueberry y ángulo correspondiente del dispensador en Wokwi
+CATALOGO = {
+    "The Blueberry Wrap Azul ($35.000)": ("Wrap Azul", 45),
+    "The Blueberry Wrap Coral ($35.000)": ("Wrap Coral", 135),
+    "Pearl Essential Choker ($85.000)": ("Pearl Choker", 90),
+    "The Blueberry Wrap Neutro ($35.000)": ("Wrap Neutro", 0),
+}
 
-st.title("🫐 blueberry — vitrina multimodal interactiva")
-st.markdown("*1 pieza = 4+ formas de usarla · hecho a mano en medellín con intención*")
+def enviar_orden_wokwi(nombre_corto, angulo):
+    mensaje = f"PEDIDO:{nombre_corto}:{angulo}"
+    publish.single(TOPIC_CMD, payload=mensaje, hostname=BROKER, port=1883)
+
+# --- INTERFAZ LIMPIA ---
+st.title("🫐 Blueberry")
+st.caption("Asistente multimodal de estilo · Medellín, Colombia")
+st.markdown("**¿Para qué sirve esta app?** Ayuda a las clientas a elegir su collar ideal según su outfit y envía la orden al instante al taller físico (Wokwi + MyMQTT).")
+
 st.divider()
 
-col1, col2 = st.columns(2)
+# MODALIDAD 1: VISIÓN (IMAGEN)
+st.subheader("1. Asesor Visual (Sube foto de tu outfit)")
+foto = st.file_uploader("Opcional: sube una foto de tu ropa para recomendarte un tono", type=["jpg", "jpeg", "png"])
 
-# MODALIDAD 1: VISIÓN / IMAGEN
-with col1:
-    st.subheader("1. Modalidad Visual: Asesor de Outfit")
-    st.write("Sube una foto de tu ropa para detectar el tono y recomendarte el collar ideal:")
-    img_file = st.file_uploader("Sube tu outfit (JPG/PNG)", type=["jpg", "png", "jpeg"])
+sugerencia_default = 0
+if foto is not None:
+    img = Image.open(foto).convert("RGB").resize((60, 60))
+    datos = np.array(img)
+    r, g, b = datos[:, :, 0].mean(), datos[:, :, 1].mean(), datos[:, :, 2].mean()
     
-    recomendacion = "Collar Luna"
-    if img_file:
-        img = Image.open(img_file).convert("RGB").resize((50, 50))
-        arr = np.array(img)
-        r, g, b = arr[:,:,0].mean(), arr[:,:,1].mean(), arr[:,:,2].mean()
-        st.image(img_file, width=220, caption="Outfit analizado")
-        
-        if r > b + 15:
-            recomendacion = "Collar Sol"
-            st.success("✨ Tonos cálidos detectados: Te recomendamos **The Blueberry Wrap Coral / Sol**")
+    col_img, col_txt = st.columns([1, 2])
+    with col_img:
+        st.image(foto, width=130)
+    with col_txt:
+        if r > b + 20:
+            st.success("Detectamos tonos cálidos en tu ropa. Te sugerimos **The Blueberry Wrap Coral**.")
+            sugerencia_default = 1
+        elif b > r + 15:
+            st.info("Detectamos tonos fríos/azules. Te sugerimos **The Blueberry Wrap Azul**.")
+            sugerencia_default = 0
         else:
-            recomendacion = "Collar Luna"
-            st.info("✨ Tonos fríos/neutros detectados: Te recomendamos **The Blueberry Wrap Azul / Luna**")
-
-# MODALIDAD 2: AUDIO / VOZ + SELECCIÓN TÁCTIL
-with col2:
-    st.subheader("2. Modalidad Voz y Personalización")
-    audio_val = st.audio_input("Graba una nota de voz con tus preferencias (ej. 'Lo quiero para cintura')")
-    if audio_val:
-        st.audio(audio_val)
-        st.caption("✅ Nota de voz capturada y vinculada a tu orden.")
-    
-    uso = st.selectbox("¿Cómo lo usarás principalmente?", [
-        "Gargantilla doble", 
-        "Collar largo clásico", 
-        "Waistbead (Cadena de cintura)", 
-        "Pulsera multi-capa"
-    ])
-    
-    collar = st.radio("Elige tu pieza Blueberry:", [
-        "Collar Luna ($35.000 COP)",
-        "Collar Sol ($35.000 COP)",
-        "Pearl Choker ($85.000 COP)"
-    ])
+            st.info("Detectamos tonos neutros. Te sugerimos **Pearl Essential Choker**.")
+            sugerencia_default = 2
 
 st.divider()
 
-# MODALIDAD 3: INTERACCIÓN CON EL MUNDO FÍSICO (WOKWI)
-st.subheader("3. Confirmación Física en Taller")
-if st.button("✨ Confirmar Pedido y Activar Taller Físico", type="primary", use_container_width=True):
-    nombre_pieza = collar.split(" (")[0]
-    angulo = 45 if "Luna" in nombre_pieza else (135 if "Sol" in nombre_pieza else 90)
-    
+# MODALIDAD 2: TEXTO Y BOTONES DIGITALES
+st.subheader("2. Personaliza y confirma tu pedido")
+
+collar_seleccionado = st.selectbox(
+    "Elige tu pieza:",
+    list(CATALOGO.keys()),
+    index=sugerencia_default
+)
+
+uso = st.radio(
+    "¿Cómo planeas usarlo?",
+    ["Gargantilla doble", "Collar largo", "Waistbead (Cintura)", "Pulsera"],
+    horizontal=True
+)
+
+nombre_cliente = st.text_input("Tu nombre (para identificar el pedido):", placeholder="Ej. Camila")
+
+st.write("")
+
+# MODALIDAD 3: ACCIÓN HACIA EL MUNDO FÍSICO (WOKWI + MYMQTT)
+if st.button("✨ Confirmar Pedido y Enviar al Taller", type="primary", use_container_width=True):
+    nombre_corto, angulo = CATALOGO[collar_seleccionado]
     try:
-        enviar_a_wokwi(f"PEDIDO:{nombre_pieza}:{angulo}")
-        st.balloons()
-        st.success(f"¡Orden enviada al taller! En Wokwi y MyMQTT se activó el LED, el sonido y el dispensador giró a {angulo}°.")
+        enviar_orden_wokwi(nombre_corto, angulo)
+        st.session_state["ultimo_pedido"] = f"{nombre_corto} ({uso}) — Cliente: {nombre_cliente or 'Invitada'}"
+        st.success(f"¡Listo! Se envió **{nombre_corto}** al taller. En Wokwi se encendió el LED, sonó la alerta y el motor giró a **{angulo}°**.")
     except Exception as e:
-        st.error(f"Error conectando con el broker MQTT: {e}")
+        st.error(f"No se pudo conectar con MQTT: {e}")
