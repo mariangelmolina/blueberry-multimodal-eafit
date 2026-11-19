@@ -35,139 +35,159 @@ st.markdown("""
         border-left: 5px solid #F6EFA6;
         margin-bottom: 1.5rem;
     }
-    .order-card {
+    .pending-card {
         background-color: #2A375A;
         padding: 1rem 1.2rem;
         border-radius: 8px;
-        border: 1px solid #6997BF;
-        margin-bottom: 0.8rem;
+        border-left: 4px solid #F6EFA6;
+        margin-bottom: 0.7rem;
+    }
+    .done-card {
+        background-color: #1F2D3D;
+        padding: 0.9rem 1.1rem;
+        border-radius: 8px;
+        border-left: 4px solid #6997BF;
+        margin-bottom: 0.7rem;
+        opacity: 0.9;
     }
     </style>
 """, unsafe_allow_html=True)
 
 BROKER = "broker.hivemq.com"
-TOPIC_STATUS = "eafit2026/mariangel_blueberry_9842/status"
+TOPIC_STOCK = "eafit2026/mariangel_blueberry_9842/stock"
+TOPIC_ESTADO = "eafit2026/mariangel_blueberry_9842/estado"
 
-# Stock en pasos de 20 en 20 (0, 20, 40, 60, 80, 100)
 if "stock_taller" not in st.session_state:
-    st.session_state["stock_taller"] = 80
-if "estado_mesa" not in st.session_state:
-    st.session_state["estado_mesa"] = "🟢 Mesa de trabajo lista"
+    st.session_state["stock_taller"] = 75
 if "historial_pedidos" not in st.session_state:
     st.session_state["historial_pedidos"] = []
+if "ultimo_evento_boton" not in st.session_state:
+    st.session_state["ultimo_evento_boton"] = ""
 
-def leer_hardware_wokwi():
-    mensajes = []
+def leer_estado_retenido_wokwi():
+    datos = {"stock": None, "estado": None}
+    
     def on_message(client, userdata, msg):
-        mensajes.append(msg.payload.decode())
+        texto = msg.payload.decode()
+        if msg.topic == TOPIC_STOCK:
+            datos["stock"] = int(texto)
+        elif msg.topic == TOPIC_ESTADO:
+            datos["estado"] = texto
 
     client = mqtt.Client(client_id=f"BB_Taller_{int(time.time())}")
     client.on_message = on_message
     client.connect(BROKER, 1883, 60)
-    client.subscribe(TOPIC_STATUS)
+    client.subscribe([(TOPIC_STOCK, 0), (TOPIC_ESTADO, 0)])
     client.loop_start()
-    time.sleep(2.0)
+    time.sleep(1.2)  # Lee inmediatamente los mensajes retenidos en el broker
     client.loop_stop()
     client.disconnect()
-    return mensajes
+    return datos
 
 # --- ENCABEZADO MESA DE TALLER ---
 st.markdown("""
 <div class="workshop-banner">
     <h1 style="margin:0;">🪡 mesa de taller · blueberry studio</h1>
     <p style="color:#6997BF !important; font-style:italic; margin-top:0.3rem; margin-bottom:0;">
-        control artesanal de insumos (mostacillas, perlas & nailon) · sincronizado con Wokwi
+        inventario en vivo (0–100%) y registro de producción · sincronizado con Wokwi
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- CONTROL DE STOCK DE 20 EN 20 (FÍSICO Y DIGITAL) ---
-col_sync, col_manual = st.columns([2, 1.5])
-
-with col_sync:
-    st.write("**Sincronización con Hardware (Wokwi):** Mueve el potenciómetro (salta de 20 en 20) o presiona el botón azul de *Pedido Listo*:")
-    if st.button("🔄 Leer Sensor y Botón de Wokwi", type="primary", use_container_width=True):
-        with st.spinner("Conectando con la mesa física..."):
-            msgs = leer_hardware_wokwi()
-            if msgs:
-                for m in msgs:
-                    if m.startswith("STOCK:"):
-                        val = int(m.split(":")[1])
-                        # Asegurar múltiplo exacto de 20
-                        st.session_state["stock_taller"] = round(val / 20) * 20
-                    elif m == "ESTADO:LISTO":
-                        st.session_state["estado_mesa"] = "✅ ¡Pieza terminada! (Botón físico presionado)"
-                        if st.session_state["historial_pedidos"]:
-                            st.session_state["historial_pedidos"][-1]["estado"] = "✅ Listo para entregar"
-                st.toast("¡Datos del taller actualizados!")
-            else:
-                st.warning("No hubo cambios nuevos. Mueve el potenciómetro o presiona el botón azul en Wokwi y vuelve a pulsar.")
-
-with col_manual:
-    st.write("**Ajuste rápido de frasco (20 en 20):**")
-    b1, b2 = st.columns(2)
-    with b1:
-        if st.button("➖ Gastar 20%", use_container_width=True):
-            st.session_state["stock_taller"] = max(0, st.session_state["stock_taller"] - 20)
-            st.rerun()
-    with b2:
-        if st.button("➕ Reponer 20%", use_container_width=True):
-            st.session_state["stock_taller"] = min(100, st.session_state["stock_taller"] + 20)
-            st.rerun()
+# --- BOTÓN DE SINCRONIZACIÓN ---
+col_info, col_btn = st.columns([2.2, 1])
+with col_info:
+    st.write("Mueve el potenciómetro en Wokwi (0 a 100%) o presiona el botón azul al terminar un collar y actualiza la mesa:")
+with col_btn:
+    if st.button("🔄 Sincronizar con Wokwi", type="primary", use_container_width=True):
+        datos = leer_estado_retenido_wokwi()
+        actualizado = False
+        if datos["stock"] is not None:
+            st.session_state["stock_taller"] = datos["stock"]
+            actualizado = True
+        if datos["estado"] == "LISTO":
+            # Busca el primer pedido pendiente y lo pasa a Finalizado
+            for p in st.session_state["historial_pedidos"]:
+                if p["estado"] == "Pendiente":
+                    p["estado"] = "Finalizado"
+                    actualizado = True
+                    break
+        if actualizado:
+            st.toast(f"✅ Sincronizado: Stock en {st.session_state['stock_taller']}%")
+        else:
+            st.info("Asegúrate de darle Play en Wokwi y mover el potenciómetro.")
 
 st.divider()
 
-# --- MÉTRICAS DE TALLER ---
+# --- MÉTRICAS DE INVENTARIO Y CONTEO DE PRODUCCIÓN ---
 pedidos = st.session_state["historial_pedidos"]
+pendientes = [p for p in pedidos if p["estado"] == "Pendiente"]
+finalizados = [p for p in pedidos if p["estado"] == "Finalizado"]
+
 stock_actual = st.session_state["stock_taller"]
-collares_estimados = (stock_actual // 20) * 4  # Cada 20% alcanza para 4 collares (100% = 20 collares)
+collares_posibles = int((stock_actual / 100) * 20)  # 100% = 20 collares
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Frasco de Mostacillas", f"{stock_actual}%", "Pasos de 20%")
-m2.metric("Collares Armables", f"{collares_estimados} und.", "4 collares por cada 20%")
-m3.metric("Pedidos en Cola", f"{len(pedidos)} / 18", "Techo sano semanal")
-m4.metric("Tiempo de Ensamble", f"{len(pedidos) * 30} min", "30 min por pieza")
+m1.metric("Stock de Insumos", f"{stock_actual}%", f"~{collares_posibles} collares armables")
+m2.metric("Pendientes por Tejer", f"{len(pendientes)}", f"{len(pendientes) * 30} min estimados")
+m3.metric("Collares Finalizados", f"{len(finalizados)}", "Listos para entregar")
+m4.metric("Total Sesión", f"{len(pedidos)} / 18", "Techo sano semanal")
 
 st.progress(stock_actual / 100)
 
 if stock_actual <= 20:
-    st.error("🚨 **ALERTA DE TALLER (≤ 20%):** Quedan insumos para 4 collares o menos. Ir a **Mega Balsos / Insumos Hag** ($120.000 COP mínimo).")
+    st.error("🚨 **ALERTA DE RESTOCK (≤ 20%):** Comprar mostacillas en **Mega Balsos** e insumos en **Insumos Hag** ($120.000 COP mínimo).")
 else:
-    st.success(f"✅ **Stock operativo ({stock_actual}%):** Insumos listos en mesa para tejer.")
+    st.success(f"✅ **Inventario operativo ({stock_actual}%):** Suficiente para cubrir la producción en curso.")
 
 st.divider()
 
-# --- COLA DE PRODUCCIÓN Y CAJA ---
-c_left, c_right = st.columns([1.3, 1])
+# --- REGISTRO DE PENDIENTES VS FINALIZADOS ---
+col_pend, col_done = st.columns(2)
 
-with c_left:
-    st.subheader("📋 Órdenes en Mesa de Trabajo")
-    st.write(f"**Estado actual:** {st.session_state['estado_mesa']}")
-    
-    if not pedidos:
-        st.write("*No hay collares pendientes por tejer. Cuando una clienta ordene en la Boutique, aparecerá aquí.*")
+with col_pend:
+    st.subheader(f"⏳ Pendientes ({len(pendientes)})")
+    if not pendientes:
+        st.write("*No hay collares pendientes. Ordena uno en la Boutique para verlo aquí.*")
     else:
-        for i, p in enumerate(reversed(pedidos), 1):
+        for idx, p in enumerate(pedidos):
+            if p["estado"] == "Pendiente":
+                st.markdown(f"""
+                <div class="pending-card">
+                    <strong style="color:#F6EFA6 !important;">{p['pieza']}</strong><br>
+                    <span>Clienta: {p['clienta']} · Entrega: {p['entrega']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("✅ Marcar como terminado", key=f"done_{idx}"):
+                    st.session_state["historial_pedidos"][idx]["estado"] = "Finalizado"
+                    st.rerun()
+
+with col_done:
+    st.subheader(f"✅ Finalizados ({len(finalizados)})")
+    if not finalizados:
+        st.write("*Aún no has finalizado collares en esta sesión.*")
+    else:
+        for p in reversed(finalizados):
             st.markdown(f"""
-            <div class="order-card">
-                <strong style="color:#F6EFA6 !important;">#{len(pedidos)-i+1} · {p['pieza']}</strong><br>
-                <span>Clienta: {p['clienta']} · Entrega: {p['entrega']}</span><br>
-                <span style="color:#6997BF !important; font-size:0.85rem;">Estado: {p['estado']}</span>
+            <div class="done-card">
+                <strong style="color:#6997BF !important;">{p['pieza']}</strong> · <span>${p['precio']:,} COP</span><br>
+                <span>Clienta: {p['clienta']} · Punto: {p['entrega']}</span>
             </div>
             """, unsafe_allow_html=True)
 
-with c_right:
-    st.subheader("💰 Reparto de Caja (40 / 20 / COGS)")
-    ventas = sum(p["precio"] for p in pedidos)
-    cogs = sum(p["cogs"] for p in pedidos)
-    creadora = int(ventas * 0.40)
-    socio = int(ventas * 0.20)
-    reinversion = ventas - cogs - creadora - socio
+st.divider()
 
-    st.metric("Ventas de la Sesión", f"${ventas:,} COP")
-    st.markdown(f"""
-    * **Utilidad Mariangel (40%):** `${creadora:,} COP`
-    * **Insta Strategist (20%):** `${socio:,} COP`
-    * **Reposición Materiales (COGS):** `${cogs:,} COP`
-    * **Fondo Reinversión (Meta $120k Hag):** `${reinversion:,} COP`
-    """)
+# --- RESUMEN FINANCIERO (40 / 20 / COGS / REINVERSIÓN) ---
+st.subheader("💰 Caja de la Sesión (Pedidos Registrados)")
+ventas = sum(p["precio"] for p in pedidos)
+cogs = sum(p["cogs"] for p in pedidos)
+creadora = int(ventas * 0.40)
+socio = int(ventas * 0.20)
+reinversion = ventas - cogs - creadora - socio
+
+f1, f2, f3, f4, f5 = st.columns(5)
+f1.metric("Ingreso Bruto", f"${ventas:,}")
+f2.metric("Mariangel (40%)", f"${creadora:,}")
+f3.metric("Strategist (20%)", f"${socio:,}")
+f4.metric("Reposición COGS", f"${cogs:,}")
+f5.metric("Reinversión Hag", f"${reinversion:,}")
