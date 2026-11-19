@@ -6,7 +6,7 @@ import os
 
 st.set_page_config(page_title="blueberry. | boutique", page_icon="🫐", layout="wide")
 
-# CSS con contraste garantizado para inputs, selectboxes, botones y alertas
+# CSS con contraste garantizado en todos los bloques (incluyendo expander, uploader y alertas)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400&display=swap');
@@ -20,10 +20,36 @@ st.markdown("""
         font-family: 'Playfair Display', serif !important;
         color: #2A375A !important;
     }
-    p, label, span, div {
+    p, label, span, div, small {
         color: #18222D !important;
     }
-    /* Cajas de seleccion (selectbox) e inputs de texto con fondo blanco y texto oscuro */
+    /* 1. Arreglo para el desplegable (Expander: Asesor Visual) */
+    details, summary, [data-testid="stExpander"] {
+        background-color: #F4F1EA !important;
+        color: #2A375A !important;
+        border: 1.5px solid #2A375A !important;
+        border-radius: 8px !important;
+    }
+    summary p, summary span, summary svg {
+        color: #2A375A !important;
+        fill: #2A375A !important;
+        font-weight: 600 !important;
+    }
+    /* 2. Arreglo para la caja de subir archivo (File Uploader) */
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: #FFFFFF !important;
+        border: 1.5px dashed #2A375A !important;
+        color: #18222D !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button {
+        background-color: #2A375A !important;
+        color: #FAF5F5 !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button span,
+    [data-testid="stFileUploaderDropzone"] button p {
+        color: #FAF5F5 !important;
+    }
+    /* 3. Cajas de seleccion (selectbox) e inputs de texto */
     div[data-baseweb="select"] > div,
     div[data-baseweb="input"] > div,
     input {
@@ -56,13 +82,14 @@ st.markdown("""
     .stButton > button[kind="primary"] p {
         color: #F6EFA6 !important;
     }
-    /* Alertas de feedback legibles */
-    div[data-testid="stAlert"] {
+    /* 4. Arreglo definitivo para las alertas y mensajes de feedback */
+    [data-testid="stAlert"], [data-testid="stAlert"] > div {
         background-color: #F4F1EA !important;
-        border: 1.5px solid #2A375A !important;
+        border: 2px solid #2A375A !important;
         color: #18222D !important;
+        border-radius: 8px !important;
     }
-    div[data-testid="stAlert"] p {
+    [data-testid="stAlert"] p, [data-testid="stAlert"] span, [data-testid="stAlert"] strong {
         color: #18222D !important;
         font-weight: 500 !important;
     }
@@ -126,13 +153,13 @@ with st.expander("📸 Asesor Visual: Sube una foto de tu outfit para recomendar
             r, g, b = arr[:, :, 0].mean(), arr[:, :, 1].mean(), arr[:, :, 2].mean()
             st.image(foto, width=120)
             if r > b + 20:
-                st.success("Tonos cálidos detectados → Te recomendamos **The Blueberry Wrap Coral**.")
+                st.success("Tonos cálidos detectados → Te recomendamos The Blueberry Wrap Coral.")
                 st.session_state["seleccionado"] = "The Blueberry Wrap Coral"
             elif b > r + 15:
-                st.info("Tonos fríos/azules detectados → Te recomendamos **The Blueberry Wrap Azul**.")
+                st.info("Tonos fríos/azules detectados → Te recomendamos The Blueberry Wrap Azul.")
                 st.session_state["seleccionado"] = "The Blueberry Wrap Azul"
             else:
-                st.info("Tonos neutros/clásicos → Te recomendamos **The Blueberry Wrap Neutro**.")
+                st.info("Tonos neutros/clásicos → Te recomendamos The Blueberry Wrap Neutro.")
                 st.session_state["seleccionado"] = "The Blueberry Wrap Neutro"
 
 # --- GALERÍA DE 5 COLLARES ---
