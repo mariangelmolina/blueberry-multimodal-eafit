@@ -1,12 +1,12 @@
 import streamlit as st
-import paho.mqtt.publish as publish
+import paho.mqtt.client as mqtt
 from PIL import Image
 import numpy as np
 import os
+import time
 
 st.set_page_config(page_title="blueberry. | boutique", page_icon="🫐", layout="wide")
 
-# CSS con contraste garantizado en todos los bloques (incluyendo expander, uploader y alertas)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400&display=swap');
@@ -23,7 +23,6 @@ st.markdown("""
     p, label, span, div, small {
         color: #18222D !important;
     }
-    /* 1. Arreglo para el desplegable (Expander: Asesor Visual) */
     details, summary, [data-testid="stExpander"] {
         background-color: #F4F1EA !important;
         color: #2A375A !important;
@@ -35,7 +34,6 @@ st.markdown("""
         fill: #2A375A !important;
         font-weight: 600 !important;
     }
-    /* 2. Arreglo para la caja de subir archivo (File Uploader) */
     [data-testid="stFileUploaderDropzone"] {
         background-color: #FFFFFF !important;
         border: 1.5px dashed #2A375A !important;
@@ -49,7 +47,6 @@ st.markdown("""
     [data-testid="stFileUploaderDropzone"] button p {
         color: #FAF5F5 !important;
     }
-    /* 3. Cajas de seleccion (selectbox) e inputs de texto */
     div[data-baseweb="select"] > div,
     div[data-baseweb="input"] > div,
     input {
@@ -61,7 +58,6 @@ st.markdown("""
         background-color: #FFFFFF !important;
         color: #18222D !important;
     }
-    /* Botones secundarios (Elegir) */
     .stButton > button[kind="secondary"] {
         background-color: #FFFFFF !important;
         color: #2A375A !important;
@@ -72,7 +68,6 @@ st.markdown("""
         background-color: #2A375A !important;
         color: #FAF5F5 !important;
     }
-    /* Boton primario (Confirmar Pedido) */
     .stButton > button[kind="primary"] {
         background-color: #2A375A !important;
         color: #F6EFA6 !important;
@@ -82,7 +77,6 @@ st.markdown("""
     .stButton > button[kind="primary"] p {
         color: #F6EFA6 !important;
     }
-    /* 4. Arreglo definitivo para las alertas y mensajes de feedback */
     [data-testid="stAlert"], [data-testid="stAlert"] > div {
         background-color: #F4F1EA !important;
         border: 2px solid #2A375A !important;
@@ -113,7 +107,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-BROKER = "broker.hivemq.com"
+BROKER = "broker.emqx.io"
 TOPIC_CMD = "eafit2026/mariangel_blueberry_9842/cmd"
 
 COLLARES = [
@@ -130,7 +124,13 @@ if "historial_pedidos" not in st.session_state:
     st.session_state["historial_pedidos"] = []
 
 def enviar_a_wokwi(nombre_corto, angulo):
-    publish.single(TOPIC_CMD, payload=f"PEDIDO:{nombre_corto}:{angulo}", hostname=BROKER, port=1883)
+    client = mqtt.Client(client_id=f"BB_Web_{int(time.time()*1000)}")
+    client.connect(BROKER, 1883, 60)
+    client.loop_start()
+    info = client.publish(TOPIC_CMD, f"PEDIDO:{nombre_corto}:{angulo}", qos=1)
+    info.wait_for_publish(timeout=3.0)
+    client.loop_stop()
+    client.disconnect()
 
 # --- HEADER ---
 st.markdown("""
